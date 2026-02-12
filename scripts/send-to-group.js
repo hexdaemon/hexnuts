@@ -44,7 +44,7 @@ function parseArgs(args) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   
-  if (!args.amount || isNaN(args.amount) || !args.group) {
+  if (!args.amount || isNaN(args.amount) || args.amount <= 0 || !args.group) {
     console.error('Usage: node send-to-group.js <amount_sats> <group> [--threshold N]');
     console.error('');
     console.error('Options:');

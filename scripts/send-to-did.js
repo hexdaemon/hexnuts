@@ -65,7 +65,7 @@ async function main() {
   const recipient = process.argv[3];
   const mintUrl = process.argv[4] || store.DEFAULT_MINT;
   
-  if (!amount || isNaN(amount) || !recipient) {
+  if (!amount || isNaN(amount) || amount <= 0 || !recipient) {
     console.error('Usage: node send-to-did.js <amount_sats> <did|npub|pubkey> [mint_url]');
     console.error('');
     console.error('Examples:');

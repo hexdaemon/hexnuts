@@ -18,7 +18,7 @@ async function main() {
   const args = process.argv.slice(2);
   const amount = parseInt(args[0]);
   
-  if (!amount || isNaN(amount)) {
+  if (!amount || isNaN(amount) || amount <= 0) {
     console.error('Usage: node lock.js <amount_sats> [pubkey|--self]');
     console.error('       node lock.js 100 --self          # Lock to your Archon pubkey');
     console.error('       node lock.js 100 02abc123...     # Lock to specific pubkey');

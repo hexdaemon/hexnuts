@@ -83,7 +83,7 @@ async function main() {
   const recipient = process.argv[3];
   const memo = process.argv.slice(4).join(' ') || 'Encrypted ecash from HexNuts';
   
-  if (!amount || !recipient) {
+  if (!amount || isNaN(amount) || amount <= 0 || !recipient) {
     console.error('Usage: node dmail-send.js <amount> <did|npub|pubkey|alias> [message]');
     console.error('');
     console.error('Recipient formats:');

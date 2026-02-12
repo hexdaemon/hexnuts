@@ -11,7 +11,7 @@ async function main() {
   const amount = parseInt(process.argv[2]);
   const mintUrl = process.argv[3] || store.DEFAULT_MINT;
   
-  if (!amount || isNaN(amount)) {
+  if (!amount || isNaN(amount) || amount <= 0) {
     console.error('Usage: node send.js <amount_sats> [mint_url]');
     process.exit(1);
   }

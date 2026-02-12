@@ -24,7 +24,7 @@ async function main() {
   const amount = parseInt(args[0]);
   const mintUrl = args[1] || store.DEFAULT_MINT;
   
-  if (!amount || isNaN(amount)) {
+  if (!amount || isNaN(amount) || amount <= 0) {
     console.error('Usage: node mint.js <amount_sats> [mint_url]');
     console.error('       node mint.js --quote <quote_id> [mint_url]');
     process.exit(1);

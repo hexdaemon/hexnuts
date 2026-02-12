@@ -72,7 +72,7 @@ function normalizePubkey(pk) {
 async function main() {
   const opts = parseArgs();
   
-  if (!opts.amount || opts.pubkeys.length === 0) {
+  if (!opts.amount || isNaN(opts.amount) || opts.amount <= 0 || opts.pubkeys.length === 0) {
     console.error('Usage: node lock-multisig.js <amount> --pubkeys <pk1,pk2,...> [options]');
     console.error('');
     console.error('Options:');
