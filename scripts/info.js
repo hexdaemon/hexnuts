@@ -4,7 +4,7 @@
  * Usage: node info.js <cashu_token>
  */
 
-const { getDecodedToken } = require('@cashu/cashu-ts');
+const { getDecodedToken, getSecretKind, getSecretData } = require('@cashu/cashu-ts');
 
 async function main() {
   const token = process.argv[2];
@@ -23,6 +23,35 @@ async function main() {
     console.log(`Amount: ${amount} sats`);
     console.log(`Proofs: ${decoded.proofs.length}`);
     console.log(`Memo: ${decoded.memo || '(none)'}`);
+    
+    // Check for P2PK locking
+    let p2pkLocked = false;
+    let lockedToPubkey = null;
+    for (const proof of decoded.proofs) {
+      try {
+        const kind = getSecretKind(proof.secret);
+        if (kind === 'P2PK') {
+          p2pkLocked = true;
+          const data = getSecretData(proof.secret);
+          if (data && data.data) {
+            lockedToPubkey = data.data;
+          }
+          break;
+        }
+      } catch (e) {
+        // Not a structured secret
+      }
+    }
+    
+    if (p2pkLocked) {
+      console.log(`\n🔐 P2PK-Locked: YES`);
+      if (lockedToPubkey) {
+        console.log(`Locked to: ${lockedToPubkey}`);
+      }
+      console.log(`\n⚠️  Only the private key holder can spend this token!`);
+    } else {
+      console.log(`\n🔓 P2PK-Locked: NO (anyone can claim)`);
+    }
     
     // Show denomination breakdown
     const denoms = {};

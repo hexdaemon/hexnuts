@@ -109,6 +109,42 @@ HexNuts integrates with [archon-* skills](https://github.com/archetech/agent-ski
 - **P2PK tokens** — Lock high-value tokens to your pubkey
 - **Private key security** — Never share your nsec/privkey
 
+## Production Checklist
+
+Run validation:
+```bash
+node scripts/validate.js
+```
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Basic wallet ops | ✅ | mint, melt, send, receive |
+| P2PK locking (NUT-11) | ✅ | DID-backed pubkey locking |
+| Archon key integration | ✅ | Uses archon-nostr derived keys |
+| Token inspection | ✅ | Shows P2PK lock status |
+| Encrypted backup | ✅ | Via archon-crypto |
+| Vault backup | ✅ | Via archon-backup |
+| Send to DID/npub | ✅ | Resolve recipient & lock |
+| Input validation | ✅ | Amount, URL, key format |
+| Multi-mint support | ✅ | Tracks proofs per mint |
+| Deterministic wallet (NUT-13) | ⏳ | Future: seed phrase backup |
+
+## Scripts Reference
+
+| Script | Purpose |
+|--------|---------|
+| `balance.js` | Check wallet balance |
+| `mint.js` | Mint tokens (pay invoice) |
+| `melt.js` | Melt tokens (pay invoice) |
+| `send.js` | Create token to send |
+| `receive.js` | Claim received token |
+| `lock.js` | Create P2PK-locked token (--self) |
+| `send-to-did.js` | Send P2PK token to DID/npub |
+| `info.js` | Inspect token details |
+| `backup.js` | Backup wallet |
+| `restore.js` | Restore wallet |
+| `validate.js` | Check installation |
+
 ## License
 
 MIT
