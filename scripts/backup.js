@@ -1,114 +1,182 @@
 #!/usr/bin/env node
 /**
- * Backup wallet to Archon vault (encrypted)
- * Usage: node backup.js [vault_name]
+ * Backup wallet to Archon vault or local file
+ * Usage: 
+ *   node backup.js [vault_name]           # Backup to Archon vault
+ *   node backup.js --local                # Local unencrypted backup
+ *   node backup.js --local --encrypt      # Local encrypted backup
  * 
- * Default vault: hexnuts-vault
- * 
- * Integrates with archon-backup and archon-crypto skills when available.
- * Falls back to local backup if skills unavailable.
+ * Default vault: hex-vault
  */
 
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const archon = require('../lib/archon');
+const { execSync } = require('child_process');
 
 const WALLET_FILE = path.join(process.env.HOME, '.config/hex/cashu-wallet.json');
-const DEFAULT_VAULT = 'hexnuts-vault';
+const BACKUP_DIR = path.join(process.env.HOME, '.config/hex');
+const DEFAULT_VAULT = 'hex-vault';
+const ARCHON_CONFIG = process.env.ARCHON_CONFIG_DIR || path.join(process.env.HOME, 'clawd/archon-personal');
 
-async function main() {
-  const vaultName = process.argv[2] || DEFAULT_VAULT;
+function parseArgs() {
+  const args = process.argv.slice(2);
+  const result = { vault: null, local: false, encrypt: false };
   
-  if (!fs.existsSync(WALLET_FILE)) {
-    console.error('No wallet file found at', WALLET_FILE);
-    process.exit(1);
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--local' || args[i] === '-l') {
+      result.local = true;
+    } else if (args[i] === '--encrypt' || args[i] === '-e') {
+      result.encrypt = true;
+    } else if (!args[i].startsWith('-')) {
+      result.vault = args[i];
+    }
   }
   
-  // Check available archon skills
-  const skills = archon.getAvailableSkills();
-  console.log('Archon skills available:', JSON.stringify(skills));
+  // Default to vault backup if not local
+  if (!result.local && !result.vault) {
+    result.vault = DEFAULT_VAULT;
+  }
   
-  // Read wallet
-  const walletData = fs.readFileSync(WALLET_FILE, 'utf8');
-  const wallet = JSON.parse(walletData);
-  
-  // Calculate balance for metadata
+  return result;
+}
+
+function getWalletStats(wallet) {
   let totalBalance = 0;
   let proofCount = 0;
-  for (const mintUrl of Object.keys(wallet.proofs || {})) {
+  const mints = Object.keys(wallet.proofs || {});
+  
+  for (const mintUrl of mints) {
     const proofs = wallet.proofs[mintUrl];
     proofCount += proofs.length;
     totalBalance += proofs.reduce((s, p) => s + p.amount, 0);
   }
   
-  // Create backup metadata
-  const backup = {
+  return { totalBalance, proofCount, mints };
+}
+
+function createBackupObject(wallet) {
+  const stats = getWalletStats(wallet);
+  return {
     type: 'hexnuts-wallet-backup',
     version: '1.0.0',
     timestamp: new Date().toISOString(),
-    metadata: {
-      totalBalance,
-      proofCount,
-      mints: Object.keys(wallet.proofs || {})
-    },
+    metadata: stats,
     wallet: wallet
   };
+}
+
+async function backupToVault(vaultName) {
+  console.log(`=== Backing up to Archon vault: ${vaultName} ===\n`);
   
-  // Write temp file
-  const tempFile = `/tmp/hexnuts-backup-${Date.now()}.json`;
+  // Read and prepare wallet
+  const walletData = fs.readFileSync(WALLET_FILE, 'utf8');
+  const wallet = JSON.parse(walletData);
+  const backup = createBackupObject(wallet);
+  const stats = backup.metadata;
+  
+  // Write temp file with short name for vault compatibility
+  const tempFile = `/tmp/hnwallet.json`;
   fs.writeFileSync(tempFile, JSON.stringify(backup, null, 2));
   
   try {
-    if (skills.backup && skills.crypto && process.env.ARCHON_PASSPHRASE) {
-      // Use archon skills for encrypted vault backup
-      console.log(`\nBacking up to Archon vault: ${vaultName}`);
-      
-      try {
-        const result = archon.backupToVault(tempFile, vaultName);
-        
-        console.log(`\n✓ Wallet backed up to vault: ${vaultName}`);
-        console.log(`  Balance: ${totalBalance} sats`);
-        console.log(`  Proofs: ${proofCount}`);
-        console.log(`  Mints: ${backup.metadata.mints.length}`);
-        console.log(`  Timestamp: ${backup.timestamp}`);
-        return;
-      } catch (e) {
-        console.log(`Vault backup failed: ${e.message}`);
-        console.log('Falling back to local encrypted backup...');
-      }
-      
-    }
+    // Add to vault using keymaster
+    const cmd = `cd ${ARCHON_CONFIG} && npx @didcid/keymaster add-vault-item ${vaultName} ${tempFile} 2>&1`;
+    const result = execSync(cmd, { encoding: 'utf8' });
     
-    if (skills.crypto) {
-      // Encrypt locally using archon-crypto
-      console.log('\nArchon backup skill not available. Creating encrypted local backup...');
-      
-      const encryptedFile = path.join(process.env.HOME, '.config/hex', `hexnuts-backup-${Date.now()}.enc`);
-      archon.encryptFile(tempFile, encryptedFile);
-      
-      console.log(`\n✓ Encrypted backup created: ${encryptedFile}`);
-      console.log(`  Balance: ${totalBalance} sats`);
-      console.log(`\nTo upload to vault manually, use archon-backup skill.`);
-      
+    if (result.includes('OK') || result.trim() === '') {
+      console.log(`✓ Wallet backed up to vault: ${vaultName}`);
+      console.log(`  Balance: ${stats.totalBalance} sats`);
+      console.log(`  Proofs: ${stats.proofCount}`);
+      console.log(`  Mints: ${stats.mints.length}`);
+      console.log(`  Timestamp: ${backup.timestamp}`);
+      console.log(`\nTo restore: node restore.js --vault ${vaultName}`);
     } else {
-      // Fallback: plain local backup with hash
-      console.log('\nArchon skills not available. Creating local backup...');
-      
-      const hash = crypto.createHash('sha256').update(walletData).digest('hex');
-      const localBackup = path.join(process.env.HOME, '.config/hex', `hexnuts-backup-${Date.now()}.json`);
-      fs.writeFileSync(localBackup, JSON.stringify(backup, null, 2));
-      
-      console.log(`\n✓ Local backup created: ${localBackup}`);
-      console.log(`  SHA256: ${hash}`);
-      console.log(`  Balance: ${totalBalance} sats`);
-      console.log('\n⚠️  Backup is NOT encrypted. Install archon skills for encryption.');
+      throw new Error(result);
     }
+  } catch (e) {
+    console.error('Vault backup failed:', e.message);
+    console.error('\nFalling back to local backup...');
+    await localBackup(false);
   } finally {
     // Clean up temp file
     if (fs.existsSync(tempFile)) {
       fs.unlinkSync(tempFile);
     }
+  }
+}
+
+async function localBackup(encrypt) {
+  console.log(`=== Creating local ${encrypt ? 'encrypted ' : ''}backup ===\n`);
+  
+  // Read and prepare wallet
+  const walletData = fs.readFileSync(WALLET_FILE, 'utf8');
+  const wallet = JSON.parse(walletData);
+  const backup = createBackupObject(wallet);
+  const stats = backup.metadata;
+  
+  const timestamp = Date.now();
+  
+  if (encrypt) {
+    // Generate random key and IV
+    const key = crypto.randomBytes(32);
+    const iv = crypto.randomBytes(16);
+    
+    // Encrypt backup
+    const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+    let encrypted = cipher.update(JSON.stringify(backup), 'utf8', 'base64');
+    encrypted += cipher.final('base64');
+    
+    // Save encrypted file
+    const encryptedFile = path.join(BACKUP_DIR, `hexnuts-backup-${timestamp}.enc`);
+    const keyFile = path.join(BACKUP_DIR, `hexnuts-backup-${timestamp}.key`);
+    
+    fs.writeFileSync(encryptedFile, JSON.stringify({
+      version: '1.0.0',
+      algorithm: 'aes-256-cbc',
+      iv: iv.toString('base64'),
+      data: encrypted
+    }, null, 2), { mode: 0o600 });
+    
+    fs.writeFileSync(keyFile, key.toString('base64'), { mode: 0o600 });
+    fs.chmodSync(encryptedFile, 0o600);
+    fs.chmodSync(keyFile, 0o600);
+    
+    console.log(`✓ Encrypted backup created`);
+    console.log(`  Backup: ${encryptedFile}`);
+    console.log(`  Key: ${keyFile}`);
+    console.log(`  Balance: ${stats.totalBalance} sats`);
+    console.log(`\n⚠️  Store the key file securely! Without it, backup cannot be restored.`);
+    
+  } else {
+    // Plain backup
+    const hash = crypto.createHash('sha256').update(walletData).digest('hex');
+    const backupFile = path.join(BACKUP_DIR, `hexnuts-backup-${timestamp}.json`);
+    
+    fs.writeFileSync(backupFile, JSON.stringify(backup, null, 2), { mode: 0o600 });
+    fs.chmodSync(backupFile, 0o600);
+    
+    console.log(`✓ Local backup created: ${backupFile}`);
+    console.log(`  SHA256: ${hash}`);
+    console.log(`  Balance: ${stats.totalBalance} sats`);
+    console.log(`  Proofs: ${stats.proofCount}`);
+    console.log(`\n⚠️  Backup is NOT encrypted. Use --encrypt for sensitive backups.`);
+  }
+}
+
+async function main() {
+  if (!fs.existsSync(WALLET_FILE)) {
+    console.error('No wallet file found at', WALLET_FILE);
+    console.error('Create a wallet first: node mint.js <amount>');
+    process.exit(1);
+  }
+  
+  const opts = parseArgs();
+  
+  if (opts.local) {
+    await localBackup(opts.encrypt);
+  } else {
+    await backupToVault(opts.vault);
   }
 }
 

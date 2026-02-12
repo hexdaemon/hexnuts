@@ -3,7 +3,7 @@
  * Send encrypted P2PK ecash via Archon dmail
  * 
  * Creates a NUT-11 token locked to recipient's pubkey,
- * encrypts it with archon-crypto, outputs ready to send.
+ * outputs ready to encrypt and send.
  * 
  * Usage:
  *   node dmail-send.js <amount> <recipient_did_or_npub> [message]
@@ -11,63 +11,71 @@
  * Examples:
  *   node dmail-send.js 100 did:cid:bagaaiera... "Happy birthday!"
  *   node dmail-send.js 50 npub1abc123...
+ *   node dmail-send.js 25 02abc123...
  */
 
 const { Wallet, getEncodedTokenV4 } = require('@cashu/cashu-ts');
-const { execSync, spawnSync } = require('child_process');
+const { execSync } = require('child_process');
 const store = require('./wallet-store');
 const archon = require('../lib/archon');
+const groups = require('../lib/groups');
 const path = require('path');
 
 const SKILLS_DIR = path.join(process.env.HOME, 'clawd/skills');
 
-// Resolve recipient to pubkey
+/**
+ * Resolve recipient to pubkey
+ * Supports: npub, DID, raw pubkey
+ */
 function resolveRecipient(recipient) {
-  if (recipient.startsWith('npub1')) {
-    // Decode npub to hex
-    try {
-      const result = execSync(`nak decode ${recipient} 2>/dev/null`, { encoding: 'utf8' });
-      const match = result.match(/"pubkey":\s*"([a-f0-9]{64})"/);
-      return match ? { pubkey: '02' + match[1], type: 'npub' } : null;
-    } catch (e) {
-      return null;
-    }
-  } else if (recipient.startsWith('did:')) {
-    // For DID, we need to resolve via Archon
-    // The archon-aliases skill might have this aliased
-    try {
-      const aliasScript = path.join(SKILLS_DIR, 'archon-aliases/scripts/resolve-did.sh');
-      const result = execSync(`bash ${aliasScript} ${recipient} 2>/dev/null`, { encoding: 'utf8' });
-      // Extract pubkey from DID document (simplified)
-      return { pubkey: null, did: recipient, type: 'did' };
-    } catch (e) {
-      return { pubkey: null, did: recipient, type: 'did' };
-    }
-  } else if (/^[0-9a-f]{64,66}$/i.test(recipient)) {
+  // Raw pubkey (64 or 66 hex chars)
+  if (/^(02|03)?[0-9a-f]{64}$/i.test(recipient)) {
     let pubkey = recipient;
     if (pubkey.length === 64) pubkey = '02' + pubkey;
-    return { pubkey, type: 'pubkey' };
+    return { pubkey, type: 'pubkey', resolved: recipient };
   }
-  return null;
-}
-
-// Encrypt message using archon-crypto
-function encryptForRecipient(message, recipientAlias) {
-  const encryptScript = path.join(SKILLS_DIR, 'archon-crypto/scripts/encrypt-message.sh');
   
-  try {
-    const result = spawnSync('bash', [encryptScript, message, recipientAlias], {
-      encoding: 'utf8',
-      env: process.env
-    });
-    
-    if (result.status === 0) {
-      return result.stdout.trim();
+  // Nostr npub
+  if (recipient.startsWith('npub1')) {
+    try {
+      const nak = process.env.NAK_PATH || '/home/sat/.local/bin/nak';
+      const result = execSync(`${nak} decode ${recipient} 2>/dev/null`, { encoding: 'utf8' });
+      const match = result.match(/"pubkey":\s*"([a-f0-9]{64})"/);
+      if (match) {
+        return { pubkey: '02' + match[1], type: 'npub', resolved: recipient };
+      }
+    } catch (e) {
+      // Fall through to return null
     }
     return null;
-  } catch (e) {
-    return null;
   }
+  
+  // Archon DID
+  if (recipient.startsWith('did:')) {
+    try {
+      // Use the groups.js DID resolution which extracts secp256k1 pubkey
+      const pubkey = groups.resolveDIDPubkey(recipient);
+      return { pubkey, type: 'did', resolved: recipient };
+    } catch (e) {
+      console.error(`Could not resolve DID: ${e.message}`);
+      return null;
+    }
+  }
+  
+  // Try as Archon alias
+  try {
+    const aliasScript = path.join(SKILLS_DIR, 'archon-aliases/scripts/resolve-did.sh');
+    const result = execSync(`bash ${aliasScript} ${recipient} 2>/dev/null`, { encoding: 'utf8' });
+    const did = result.trim();
+    if (did.startsWith('did:')) {
+      const pubkey = groups.resolveDIDPubkey(did);
+      return { pubkey, type: 'alias', resolved: did };
+    }
+  } catch (e) {
+    // Not an alias
+  }
+  
+  return null;
 }
 
 async function main() {
@@ -76,11 +84,18 @@ async function main() {
   const memo = process.argv.slice(4).join(' ') || 'Encrypted ecash from HexNuts';
   
   if (!amount || !recipient) {
-    console.error('Usage: node dmail-send.js <amount> <did|npub|pubkey> [message]');
+    console.error('Usage: node dmail-send.js <amount> <did|npub|pubkey|alias> [message]');
+    console.error('');
+    console.error('Recipient formats:');
+    console.error('  npub1...           Nostr public key');
+    console.error('  did:cid:...        Archon DID');
+    console.error('  02abc123...        Raw secp256k1 pubkey');
+    console.error('  my-contact         Archon alias');
     console.error('');
     console.error('Examples:');
     console.error('  node dmail-send.js 100 npub1qkjnsgk6zrs... "Happy birthday!"');
     console.error('  node dmail-send.js 50 did:cid:bagaaiera...');
+    console.error('  node dmail-send.js 25 sat   # Using Archon alias');
     process.exit(1);
   }
   
@@ -96,81 +111,79 @@ async function main() {
   }
   
   // Resolve recipient
-  console.log(`Resolving recipient: ${recipient.slice(0, 30)}...`);
+  console.log(`Resolving recipient: ${recipient}...`);
   const resolved = resolveRecipient(recipient);
   
-  if (!resolved) {
-    console.error('Could not resolve recipient');
+  if (!resolved || !resolved.pubkey) {
+    console.error('Could not resolve recipient to pubkey');
+    console.error('');
+    console.error('For DIDs, ensure the DID document contains a secp256k1 key.');
+    console.error('For npubs, ensure nak is installed at ~/.local/bin/nak');
     process.exit(1);
   }
   
-  let pubkey = resolved.pubkey;
-  
-  // For DID, we need the Nostr-derived pubkey (same secp256k1 curve)
-  // If we can't get it directly, use the recipient identifier for encryption
-  if (!pubkey && resolved.type === 'did') {
-    console.log('Note: DID pubkey extraction not yet implemented');
-    console.log('Using recipient DID for encryption only (token will be regular, not P2PK)');
-  }
+  console.log(`✓ Resolved (${resolved.type}): ${resolved.pubkey.slice(0, 20)}...`);
   
   const wallet = new Wallet(mintUrl);
   await wallet.loadMint();
   
-  let token;
+  // Create P2PK-locked token
+  console.log(`Creating P2PK token for ${amount} sats...`);
   
-  if (pubkey) {
-    // Create P2PK-locked token
-    console.log(`Creating P2PK token locked to: ${pubkey.slice(0, 20)}...`);
-    
-    const { keep, send } = await wallet.ops
-      .send(amount, proofs)
-      .asP2PK({ pubkey })
-      .run();
-    
-    store.saveProofsForMint(mintUrl, keep);
-    token = getEncodedTokenV4({ mint: mintUrl, proofs: send });
-  } else {
-    // Create regular token (encryption provides security)
-    console.log('Creating regular token (encrypted delivery)...');
-    
-    const { keep, send } = await wallet.send(amount, proofs);
-    store.saveProofsForMint(mintUrl, keep);
-    token = getEncodedTokenV4({ mint: mintUrl, proofs: send });
-  }
+  const { keep, send } = await wallet.ops
+    .send(amount, proofs)
+    .asP2PK({ pubkey: resolved.pubkey })
+    .run();
+  
+  store.saveProofsForMint(mintUrl, keep);
+  const token = getEncodedTokenV4({ mint: mintUrl, proofs: send });
+  const lockedAmount = send.reduce((s, p) => s + p.amount, 0);
   
   // Build the dmail content
-  const dmailContent = `💸 Encrypted Ecash
-
-Amount: ${amount} sats
+  console.log('\n' + '='.repeat(60));
+  console.log('ENCRYPTED ECASH DMAIL');
+  console.log('='.repeat(60));
+  
+  console.log(`
+Amount: ${lockedAmount} sats
 Mint: ${mintUrl}
-${pubkey ? '🔐 P2PK-locked to your key' : '🔓 Claim with: node receive.js <token>'}
+Locked to: ${resolved.pubkey.slice(0, 20)}... (${resolved.type})
+Message: ${memo}
 
-${memo}
-
---- TOKEN ---
+--- P2PK TOKEN (only recipient can spend) ---
 ${token}
 --- END TOKEN ---
-
-Sent via HexNuts 🥜`;
-
-  console.log('\n=== Encrypted Ecash Dmail ===\n');
-  console.log(dmailContent);
+`);
   
-  // Try to encrypt if archon-crypto available
+  // Delivery instructions
   const skills = archon.getAvailableSkills();
-  if (skills.crypto) {
-    console.log('\n--- Archon Encryption ---');
-    console.log('To encrypt for recipient:');
-    console.log(`  ~/clawd/skills/archon-crypto/scripts/encrypt-message.sh "${token}" <recipient-alias>`);
+  
+  console.log('='.repeat(60));
+  console.log('DELIVERY OPTIONS');
+  console.log('='.repeat(60));
+  
+  if (resolved.type === 'npub') {
+    console.log(`
+• Nostr DM (recommended):
+  ~/clawd/skills/nostr/scripts/nostr-dm.sh ${recipient} "${token}"
+`);
   }
   
-  console.log('\n--- Send via ---');
-  console.log('• Nostr DM: ~/clawd/skills/nostr/scripts/nostr-dm.sh <npub> "<message>"');
-  console.log('• Signal/Telegram: Copy and send directly');
-  console.log('• Archon dmail: Encrypt with archon-crypto first');
+  if (skills.crypto) {
+    console.log(`• Archon encrypted message:
+  ~/clawd/skills/archon-crypto/scripts/encrypt-message.sh "${token}" <recipient-alias>
+`);
+  }
+  
+  console.log(`• Copy token and send via any secure channel
+  (Signal, Telegram, encrypted email)
+
+Recipient claims with:
+  node receive.js "${token.slice(0, 20)}..." --self
+`);
   
   const newBalance = store.getBalanceForMint(mintUrl);
-  console.log(`\nNew balance: ${newBalance} sats`);
+  console.log(`Your new balance: ${newBalance} sats`);
 }
 
 main().catch(err => {

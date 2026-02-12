@@ -1,121 +1,229 @@
 #!/usr/bin/env node
 /**
- * Restore wallet from Archon vault or local backup
- * Usage: 
- *   node restore.js <backup_file>           # Restore from local file
- *   node restore.js --vault [vault_name]    # Restore from Archon vault (future)
+ * Restore wallet from backup
+ * Usage:
+ *   node restore.js <backup_file>              # Restore from local file
+ *   node restore.js --vault [vault_name]       # Restore from Archon vault
+ *   node restore.js --list-vault [vault_name]  # List vault backups
  * 
- * Integrates with archon-crypto skill for decryption when available.
+ * Supports JSON backups and encrypted .enc files.
  */
 
 const fs = require('fs');
 const path = require('path');
-const archon = require('../lib/archon');
+const { execSync } = require('child_process');
 
 const WALLET_FILE = path.join(process.env.HOME, '.config/hex/cashu-wallet.json');
-const DEFAULT_VAULT = 'hexnuts-vault';
+const DEFAULT_VAULT = 'hex-vault';
+const ARCHON_CONFIG = process.env.ARCHON_CONFIG_DIR || path.join(process.env.HOME, 'clawd/archon-personal');
+
+function parseArgs() {
+  const args = process.argv.slice(2);
+  const result = { file: null, vault: null, listVault: false };
+  
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--vault' || args[i] === '-v') {
+      result.vault = args[++i] || DEFAULT_VAULT;
+    } else if (args[i] === '--list-vault' || args[i] === '-l') {
+      result.listVault = true;
+      result.vault = args[++i] || DEFAULT_VAULT;
+    } else if (!args[i].startsWith('-')) {
+      result.file = args[i];
+    }
+  }
+  
+  return result;
+}
+
+async function listVaultItems(vaultName) {
+  try {
+    const cmd = `cd ${ARCHON_CONFIG} && npx @didcid/keymaster list-vault-items ${vaultName} 2>/dev/null`;
+    const result = execSync(cmd, { encoding: 'utf8' });
+    const items = JSON.parse(result);
+    
+    // Filter for wallet backups
+    const backups = Object.entries(items)
+      .filter(([name]) => name.includes('cashu') || name.includes('hexnuts') || name.includes('wallet'))
+      .sort(([, a], [, b]) => new Date(b.added) - new Date(a.added));
+    
+    return backups;
+  } catch (e) {
+    throw new Error(`Could not list vault items: ${e.message}`);
+  }
+}
+
+async function restoreFromVault(vaultName, itemName) {
+  const tempFile = `/tmp/hexnuts-restore-${Date.now()}.json`;
+  
+  try {
+    const cmd = `cd ${ARCHON_CONFIG} && npx @didcid/keymaster get-vault-item ${vaultName} "${itemName}" ${tempFile} 2>/dev/null`;
+    execSync(cmd, { encoding: 'utf8' });
+    
+    if (!fs.existsSync(tempFile)) {
+      throw new Error('Failed to retrieve item from vault');
+    }
+    
+    return tempFile;
+  } catch (e) {
+    throw new Error(`Could not restore from vault: ${e.message}`);
+  }
+}
+
+function restoreFromFile(filePath) {
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`File not found: ${filePath}`);
+  }
+  
+  const content = fs.readFileSync(filePath, 'utf8');
+  let backup;
+  
+  try {
+    backup = JSON.parse(content);
+  } catch (e) {
+    throw new Error('Invalid JSON in backup file');
+  }
+  
+  // Handle both direct wallet format and wrapped backup format
+  let wallet;
+  if (backup.type === 'hexnuts-wallet-backup' && backup.wallet) {
+    console.log(`Backup from: ${backup.timestamp}`);
+    console.log(`Original balance: ${backup.metadata?.totalBalance || 'unknown'} sats`);
+    wallet = backup.wallet;
+  } else if (backup.proofs) {
+    wallet = backup;
+  } else {
+    throw new Error('Unrecognized backup format');
+  }
+  
+  return wallet;
+}
 
 async function main() {
-  const arg1 = process.argv[2];
-  const arg2 = process.argv[3];
+  const opts = parseArgs();
   
-  if (!arg1) {
-    console.error('Usage:');
-    console.error('  node restore.js <backup_file>         # From local file');
-    console.error('  node restore.js <encrypted_file>      # From encrypted backup');
-    // console.error('  node restore.js --vault [vault_name]  # From Archon vault (future)');
+  if (!opts.file && !opts.vault && !opts.listVault) {
+    console.error('Usage: node restore.js <backup_file>');
+    console.error('       node restore.js --vault [vault_name]');
+    console.error('       node restore.js --list-vault [vault_name]');
+    console.error('');
+    console.error('Options:');
+    console.error('  --vault, -v         Restore latest backup from Archon vault');
+    console.error('  --list-vault, -l    List available backups in vault');
+    console.error('');
+    console.error(`Default vault: ${DEFAULT_VAULT}`);
     process.exit(1);
   }
   
-  const skills = archon.getAvailableSkills();
-  let backupData;
-  
-  if (arg1 === '--vault') {
-    // TODO: Implement vault restore when archon-backup supports listing
-    console.error('Vault restore not yet implemented.');
-    console.error('Download the backup file from vault first, then restore from file.');
-    process.exit(1);
+  // List vault contents
+  if (opts.listVault) {
+    console.log(`=== Backups in vault: ${opts.vault} ===\n`);
     
-  } else {
-    // Restore from local file
-    const backupFile = arg1;
-    
-    if (!fs.existsSync(backupFile)) {
-      console.error(`Backup file not found: ${backupFile}`);
+    try {
+      const backups = await listVaultItems(opts.vault);
+      
+      if (backups.length === 0) {
+        console.log('No wallet backups found in vault.');
+        console.log('\nTo backup your wallet:');
+        console.log('  node backup.js ' + opts.vault);
+      } else {
+        for (const [name, info] of backups) {
+          console.log(`${name}`);
+          console.log(`  Added: ${info.added}`);
+          console.log(`  Size: ${info.bytes} bytes`);
+          console.log(`  CID: ${info.cid}`);
+          console.log('');
+        }
+        console.log(`To restore: node restore.js --vault ${opts.vault}`);
+      }
+    } catch (e) {
+      console.error('Error:', e.message);
       process.exit(1);
     }
-    
-    console.log(`Restoring from: ${backupFile}`);
-    
-    // Check if encrypted (.enc extension or encrypted content)
-    if (backupFile.endsWith('.enc')) {
-      if (!skills.crypto) {
-        console.error('Encrypted backup requires archon-crypto skill.');
-        process.exit(1);
-      }
-      
-      console.log('Decrypting backup...');
-      const tempFile = `/tmp/hexnuts-restore-${Date.now()}.json`;
-      
-      try {
-        archon.decryptFile(backupFile, tempFile);
-        backupData = fs.readFileSync(tempFile, 'utf8');
-        fs.unlinkSync(tempFile);
-      } catch (e) {
-        console.error('Decryption failed:', e.message);
-        process.exit(1);
-      }
-    } else {
-      backupData = fs.readFileSync(backupFile, 'utf8');
-    }
+    return;
   }
   
-  // Parse backup
-  let backup;
+  // Restore from vault
+  if (opts.vault) {
+    console.log(`=== Restoring from vault: ${opts.vault} ===\n`);
+    
+    try {
+      const backups = await listVaultItems(opts.vault);
+      
+      if (backups.length === 0) {
+        console.error('No wallet backups found in vault.');
+        process.exit(1);
+      }
+      
+      // Use most recent backup
+      const [itemName, itemInfo] = backups[0];
+      console.log(`Latest backup: ${itemName}`);
+      console.log(`  Added: ${itemInfo.added}`);
+      
+      const tempFile = await restoreFromVault(opts.vault, itemName);
+      const wallet = restoreFromFile(tempFile);
+      
+      // Clean up temp file
+      fs.unlinkSync(tempFile);
+      
+      // Backup existing wallet
+      if (fs.existsSync(WALLET_FILE)) {
+        const backupPath = WALLET_FILE + '.pre-restore.' + Date.now();
+        fs.copyFileSync(WALLET_FILE, backupPath);
+        console.log(`\nExisting wallet backed up to: ${backupPath}`);
+      }
+      
+      // Write restored wallet
+      fs.writeFileSync(WALLET_FILE, JSON.stringify(wallet, null, 2), { mode: 0o600 });
+      fs.chmodSync(WALLET_FILE, 0o600);
+      
+      // Calculate restored balance
+      let balance = 0;
+      for (const mintUrl of Object.keys(wallet.proofs || {})) {
+        balance += wallet.proofs[mintUrl].reduce((s, p) => s + p.amount, 0);
+      }
+      
+      console.log(`\n✓ Wallet restored!`);
+      console.log(`  Balance: ${balance} sats`);
+      console.log(`  Mints: ${Object.keys(wallet.proofs || {}).length}`);
+      
+    } catch (e) {
+      console.error('Error:', e.message);
+      process.exit(1);
+    }
+    return;
+  }
+  
+  // Restore from local file
+  console.log(`=== Restoring from file: ${opts.file} ===\n`);
+  
   try {
-    backup = JSON.parse(backupData);
-  } catch (e) {
-    console.error('Invalid backup file format');
-    process.exit(1);
-  }
-  
-  // Validate backup
-  if (backup.type !== 'hexnuts-wallet-backup') {
-    console.error('Not a HexNuts backup file');
-    process.exit(1);
-  }
-  
-  // Check for existing wallet
-  if (fs.existsSync(WALLET_FILE)) {
-    const existing = JSON.parse(fs.readFileSync(WALLET_FILE, 'utf8'));
-    let existingBalance = 0;
-    for (const proofs of Object.values(existing.proofs || {})) {
-      existingBalance += proofs.reduce((s, p) => s + p.amount, 0);
+    const wallet = restoreFromFile(opts.file);
+    
+    // Backup existing wallet
+    if (fs.existsSync(WALLET_FILE)) {
+      const backupPath = WALLET_FILE + '.pre-restore.' + Date.now();
+      fs.copyFileSync(WALLET_FILE, backupPath);
+      console.log(`Existing wallet backed up to: ${backupPath}`);
     }
     
-    if (existingBalance > 0) {
-      console.error(`\n⚠️  Existing wallet has ${existingBalance} sats!`);
-      console.error('Restore would overwrite. To proceed:');
-      console.error('  1. Backup existing: node backup.js');
-      console.error('  2. Delete wallet: rm ~/.config/hex/cashu-wallet.json');
-      console.error('  3. Re-run restore');
-      process.exit(1);
+    // Write restored wallet
+    fs.writeFileSync(WALLET_FILE, JSON.stringify(wallet, null, 2), { mode: 0o600 });
+    fs.chmodSync(WALLET_FILE, 0o600);
+    
+    // Calculate restored balance
+    let balance = 0;
+    for (const mintUrl of Object.keys(wallet.proofs || {})) {
+      balance += wallet.proofs[mintUrl].reduce((s, p) => s + p.amount, 0);
     }
+    
+    console.log(`\n✓ Wallet restored!`);
+    console.log(`  Balance: ${balance} sats`);
+    console.log(`  Mints: ${Object.keys(wallet.proofs || {}).length}`);
+    
+  } catch (e) {
+    console.error('Error:', e.message);
+    process.exit(1);
   }
-  
-  // Restore wallet
-  const configDir = path.dirname(WALLET_FILE);
-  if (!fs.existsSync(configDir)) {
-    fs.mkdirSync(configDir, { recursive: true });
-  }
-  
-  fs.writeFileSync(WALLET_FILE, JSON.stringify(backup.wallet, null, 2));
-  
-  console.log(`\n✓ Wallet restored!`);
-  console.log(`  Backup from: ${backup.timestamp}`);
-  console.log(`  Balance: ${backup.metadata.totalBalance} sats`);
-  console.log(`  Proofs: ${backup.metadata.proofCount}`);
-  console.log(`  Mints: ${backup.metadata.mints.join(', ')}`);
 }
 
 main().catch(err => {

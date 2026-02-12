@@ -12,7 +12,7 @@ const DEFAULT_MINT = 'https://bolverker.com/cashu';
 
 function ensureConfigDir() {
   if (!fs.existsSync(CONFIG_DIR)) {
-    fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    fs.mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
   }
 }
 
@@ -31,7 +31,9 @@ function loadWallet() {
 
 function saveWallet(wallet) {
   ensureConfigDir();
-  fs.writeFileSync(WALLET_FILE, JSON.stringify(wallet, null, 2));
+  fs.writeFileSync(WALLET_FILE, JSON.stringify(wallet, null, 2), { mode: 0o600 });
+  // Ensure permissions even if file existed
+  fs.chmodSync(WALLET_FILE, 0o600);
 }
 
 function getProofsForMint(mintUrl) {

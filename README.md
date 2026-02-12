@@ -226,15 +226,24 @@ node scripts/validate.js
 | Feature | Status | Notes |
 |---------|--------|-------|
 | Basic wallet ops | ✅ | mint, melt, send, receive |
-| P2PK locking (NUT-11) | ✅ | DID-backed pubkey locking |
+| P2PK locking (NUT-11) | ✅ | Single key + multi-key + threshold |
+| Group locking | ✅ | Archon groups with M-of-N threshold |
 | Archon key integration | ✅ | Uses archon-nostr derived keys |
 | Token inspection | ✅ | Shows P2PK lock status |
-| Encrypted backup | ✅ | Via archon-crypto |
-| Vault backup | ✅ | Via archon-backup |
-| Send to DID/npub | ✅ | Resolve recipient & lock |
+| Local backup | ✅ | Plain or encrypted |
+| Vault backup | ✅ | Direct to Archon vault |
+| Vault restore | ✅ | `--vault` flag supported |
+| Send to DID/npub | ✅ | Full resolution implemented |
 | Input validation | ✅ | Amount, URL, key format |
 | Multi-mint support | ✅ | Tracks proofs per mint |
-| Deterministic wallet (NUT-13) | ✅ | Uses Archon mnemonic |
+| File permissions | ✅ | 600 for wallet + counters |
+| Deterministic wallet (NUT-13) | ✅ | Standalone scripts |
+
+### Security
+
+- Wallet file permissions set to 600 (owner read/write only)
+- `--privkey-file` option to avoid key exposure in shell history
+- Encrypted local backup option with AES-256-CBC
 
 ## Scripts Reference
 
