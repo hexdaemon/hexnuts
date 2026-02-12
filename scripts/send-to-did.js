@@ -24,12 +24,16 @@ const { createWallet } = require('../lib/wallet');
 function npubToHex(npub) {
   if (!npub.startsWith('npub1')) return null;
   try {
-    // Use nak to decode if available
-    const result = execSync(`nak decode ${npub} 2>/dev/null`, { encoding: 'utf8' });
-    const match = result.match(/"pubkey":\s*"([a-f0-9]{64})"/);
+    const nak = process.env.NAK_PATH || '/home/sat/.local/bin/nak';
+    const result = execSync(`${nak} decode ${npub} 2>/dev/null`, { encoding: 'utf8' }).trim();
+    // nak decode outputs raw hex (64 chars) directly
+    if (/^[a-f0-9]{64}$/i.test(result)) {
+      return result;
+    }
+    // Fallback: try JSON format in case nak version differs
+    const match = result.match(/"pubkey":\s*"([a-f0-9]{64})"/i);
     return match ? match[1] : null;
   } catch (e) {
-    // Fallback: bech32 decode (simplified)
     return null;
   }
 }
