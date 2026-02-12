@@ -102,6 +102,27 @@ HexNuts integrates with [archon-* skills](https://github.com/archetech/agent-ski
 - Encrypted backups to distributed vault
 - Key derivation from Archon identity
 
+## Deterministic Wallet (NUT-13)
+
+Derive wallet from Archon mnemonic — no separate seed phrase needed:
+
+```bash
+# Initialize deterministic mode
+export ARCHON_PASSPHRASE="your-passphrase"
+node scripts/init-deterministic.js
+
+# All operations now use deterministic derivation
+node scripts/mint.js 100
+
+# Recover wallet on new device
+node scripts/recover.js
+```
+
+Benefits:
+- Wallet derived from Archon 12/24 word mnemonic
+- Recover Archon = recover Cashu wallet
+- Counter state tracked for proof uniqueness
+
 ## Security
 
 - **Wallet file is plaintext** — Token proofs stored unencrypted locally
@@ -127,7 +148,7 @@ node scripts/validate.js
 | Send to DID/npub | ✅ | Resolve recipient & lock |
 | Input validation | ✅ | Amount, URL, key format |
 | Multi-mint support | ✅ | Tracks proofs per mint |
-| Deterministic wallet (NUT-13) | ⏳ | Future: seed phrase backup |
+| Deterministic wallet (NUT-13) | ✅ | Uses Archon mnemonic |
 
 ## Scripts Reference
 
@@ -144,6 +165,8 @@ node scripts/validate.js
 | `backup.js` | Backup wallet |
 | `restore.js` | Restore wallet |
 | `validate.js` | Check installation |
+| `init-deterministic.js` | Enable NUT-13 deterministic mode |
+| `recover.js` | Recover wallet from Archon mnemonic |
 
 ## License
 
