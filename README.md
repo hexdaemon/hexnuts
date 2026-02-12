@@ -48,7 +48,7 @@ node scripts/info.js <cashu_token>
 
 ### P2PK Locking (NUT-11)
 
-Lock tokens so only a specific private key holder can spend them:
+Lock tokens so only specific private key holder(s) can spend:
 
 ```bash
 # Lock to your own Archon/Nostr pubkey
@@ -59,10 +59,27 @@ node scripts/lock.js 100 02abc123...
 
 # Receive a P2PK-locked token (using your key)
 node scripts/receive.js <cashu_token> --self
-
-# Receive with explicit privkey
-node scripts/receive.js <cashu_token> <privkey>
 ```
+
+### Multi-Signature Tokens
+
+Create tokens requiring multiple DID signatures:
+
+```bash
+# 2-of-3 multisig: any 2 of 3 DIDs can spend
+node scripts/lock-multisig.js 100 --pubkeys pk1,pk2,pk3 --threshold 2
+
+# Include yourself + another DID
+node scripts/lock-multisig.js 100 --pubkeys pk1,pk2 --self --threshold 2
+
+# Escrow with timeout: pk1 OR pk2 can spend, refund to pk3 after 24h
+node scripts/lock-multisig.js 100 --pubkeys pk1,pk2 --refund pk3 --locktime $(date -d "+24 hours" +%s)
+```
+
+Use cases:
+- **Joint accounts**: Require multiple parties to agree
+- **Escrow**: Seller + buyer, with arbiter refund
+- **Dead man switch**: Auto-refund if not claimed
 
 ### Archon Vault Backup
 
@@ -203,6 +220,7 @@ node scripts/validate.js
 | `send.js` | Create token to send |
 | `receive.js` | Claim received token |
 | `lock.js` | Create P2PK-locked token (--self) |
+| `lock-multisig.js` | Create multi-signature token |
 | `send-to-did.js` | Send P2PK token to DID/npub |
 | `info.js` | Inspect token details |
 | `backup.js` | Backup wallet |
