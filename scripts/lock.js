@@ -6,27 +6,13 @@
  * Usage: 
  *   node lock.js <amount_sats> [pubkey]     # Lock to specific pubkey
  *   node lock.js <amount_sats> --self       # Lock to own Archon/Nostr pubkey
+ * 
+ * Integrates with archon-nostr skill for key management.
  */
 
 const { Wallet, getEncodedTokenV4 } = require('@cashu/cashu-ts');
 const store = require('./wallet-store');
-const fs = require('fs');
-const path = require('path');
-
-// Load Archon/Nostr pubkey from env
-function getOwnPubkey() {
-  const envFile = path.join(process.env.HOME, '.config/hex/nostr.env');
-  if (fs.existsSync(envFile)) {
-    const content = fs.readFileSync(envFile, 'utf8');
-    const match = content.match(/NOSTR_PUBLIC_KEY_HEX="?([a-f0-9]+)"?/i);
-    if (match) {
-      // Cashu expects 02/03 prefix for compressed pubkey
-      // Nostr pubkey is x-coordinate only, need to derive full compressed key
-      return match[1];
-    }
-  }
-  return null;
-}
+const archon = require('../lib/archon');
 
 async function main() {
   const args = process.argv.slice(2);
@@ -43,23 +29,24 @@ async function main() {
   const mintUrl = store.DEFAULT_MINT;
   
   if (args[1] === '--self') {
-    pubkey = getOwnPubkey();
+    pubkey = archon.getCashuPubkey();
     if (!pubkey) {
-      console.error('Could not find own pubkey. Check ~/.config/hex/nostr.env');
+      console.error('Could not load own pubkey.');
+      console.error('Ensure archon-nostr skill has run or ~/.config/hex/nostr.env exists.');
+      const available = archon.getAvailableSkills();
+      console.error('Available archon skills:', JSON.stringify(available));
       process.exit(1);
     }
     console.log(`Locking to own pubkey: ${pubkey.slice(0, 16)}...`);
   } else if (args[1]) {
     pubkey = args[1];
+    // Ensure pubkey has proper format (02 or 03 prefix for compressed)
+    if (pubkey.length === 64) {
+      pubkey = '02' + pubkey;
+    }
   } else {
     console.error('Must specify pubkey or --self');
     process.exit(1);
-  }
-  
-  // Ensure pubkey has proper format (02 or 03 prefix for compressed)
-  if (pubkey.length === 64) {
-    // x-coordinate only, add 02 prefix (assume even y)
-    pubkey = '02' + pubkey;
   }
   
   const proofs = store.getProofsForMint(mintUrl);

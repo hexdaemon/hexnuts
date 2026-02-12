@@ -3,18 +3,17 @@
  * Restore wallet from Archon vault or local backup
  * Usage: 
  *   node restore.js <backup_file>           # Restore from local file
- *   node restore.js --vault [vault_name]    # Restore from Archon vault
+ *   node restore.js --vault [vault_name]    # Restore from Archon vault (future)
  * 
- * Requires: ARCHON_PASSPHRASE for vault restore
+ * Integrates with archon-crypto skill for decryption when available.
  */
 
-const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const archon = require('../lib/archon');
 
 const WALLET_FILE = path.join(process.env.HOME, '.config/hex/cashu-wallet.json');
 const DEFAULT_VAULT = 'hexnuts-vault';
-const ARCHON_CONFIG = path.join(process.env.HOME, '.config/hex/archon');
 
 async function main() {
   const arg1 = process.argv[2];
@@ -23,49 +22,20 @@ async function main() {
   if (!arg1) {
     console.error('Usage:');
     console.error('  node restore.js <backup_file>         # From local file');
-    console.error('  node restore.js --vault [vault_name]  # From Archon vault');
+    console.error('  node restore.js <encrypted_file>      # From encrypted backup');
+    // console.error('  node restore.js --vault [vault_name]  # From Archon vault (future)');
     process.exit(1);
   }
   
+  const skills = archon.getAvailableSkills();
   let backupData;
   
   if (arg1 === '--vault') {
-    // Restore from Archon vault
-    const vaultName = arg2 || DEFAULT_VAULT;
+    // TODO: Implement vault restore when archon-backup supports listing
+    console.error('Vault restore not yet implemented.');
+    console.error('Download the backup file from vault first, then restore from file.');
+    process.exit(1);
     
-    if (!process.env.ARCHON_PASSPHRASE) {
-      console.error('ARCHON_PASSPHRASE environment variable required');
-      process.exit(1);
-    }
-    
-    console.log(`Restoring from Archon vault: ${vaultName}...`);
-    
-    try {
-      const cmd = `cd ${ARCHON_CONFIG} && ARCHON_CONFIG_DIR=${ARCHON_CONFIG} npx @didcid/keymaster vault-list ${vaultName} --json 2>&1`;
-      const listResult = execSync(cmd, { encoding: 'utf8', env: { ...process.env, ARCHON_CONFIG_DIR: ARCHON_CONFIG } });
-      
-      // Parse vault contents and find latest backup
-      const items = JSON.parse(listResult);
-      const backups = items.filter(i => i.name && i.name.includes('hexnuts-backup'));
-      
-      if (backups.length === 0) {
-        console.error('No backups found in vault');
-        process.exit(1);
-      }
-      
-      // Get latest
-      const latest = backups.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
-      console.log(`Found backup: ${latest.name} (${latest.timestamp})`);
-      
-      // Decrypt
-      const decryptCmd = `cd ${ARCHON_CONFIG} && ARCHON_CONFIG_DIR=${ARCHON_CONFIG} npx @didcid/keymaster decrypt-file ${latest.cid} 2>&1`;
-      backupData = execSync(decryptCmd, { encoding: 'utf8', env: { ...process.env, ARCHON_CONFIG_DIR: ARCHON_CONFIG } });
-      
-    } catch (err) {
-      console.error('Failed to restore from vault:', err.message);
-      console.error('\nTry restoring from a local backup file instead.');
-      process.exit(1);
-    }
   } else {
     // Restore from local file
     const backupFile = arg1;
@@ -76,7 +46,28 @@ async function main() {
     }
     
     console.log(`Restoring from: ${backupFile}`);
-    backupData = fs.readFileSync(backupFile, 'utf8');
+    
+    // Check if encrypted (.enc extension or encrypted content)
+    if (backupFile.endsWith('.enc')) {
+      if (!skills.crypto) {
+        console.error('Encrypted backup requires archon-crypto skill.');
+        process.exit(1);
+      }
+      
+      console.log('Decrypting backup...');
+      const tempFile = `/tmp/hexnuts-restore-${Date.now()}.json`;
+      
+      try {
+        archon.decryptFile(backupFile, tempFile);
+        backupData = fs.readFileSync(tempFile, 'utf8');
+        fs.unlinkSync(tempFile);
+      } catch (e) {
+        console.error('Decryption failed:', e.message);
+        process.exit(1);
+      }
+    } else {
+      backupData = fs.readFileSync(backupFile, 'utf8');
+    }
   }
   
   // Parse backup

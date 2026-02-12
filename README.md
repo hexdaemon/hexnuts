@@ -85,13 +85,22 @@ node scripts/restore.js /path/to/backup.json
 - **Archon config:** `~/.config/hex/archon/`
 - **Keys:** `~/.config/hex/nostr.env` (NOSTR_SECRET_KEY_HEX, NOSTR_PUBLIC_KEY_HEX)
 
-## Archon DID Integration
+## Archon Skills Integration
 
-HexNuts uses your Archon-derived secp256k1 keys for P2PK operations:
-- Same keys as your Nostr identity (npub/nsec)
-- Lock tokens to your DID-backed pubkey
-- Only you can unlock tokens locked to your identity
-- Cryptographic proof of ecash ownership
+HexNuts integrates with [archon-* skills](https://github.com/archetech/agent-skills) when available:
+
+| Skill | Usage in HexNuts |
+|-------|-----------------|
+| `archon-nostr` | Load secp256k1 keys for P2PK |
+| `archon-crypto` | Encrypt wallet backups |
+| `archon-backup` | Store backups in DID vault |
+
+**Without archon skills:** Falls back to direct key loading from `~/.config/hex/nostr.env` and unencrypted local backups.
+
+**With archon skills:**
+- P2PK tokens locked to your DID-backed pubkey
+- Encrypted backups to distributed vault
+- Key derivation from Archon identity
 
 ## Security
 

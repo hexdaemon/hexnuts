@@ -5,23 +5,13 @@
  *   node receive.js <cashu_token>              # Regular token
  *   node receive.js <cashu_token> --self       # P2PK token locked to own key
  *   node receive.js <cashu_token> <privkey>    # P2PK token with explicit privkey
+ * 
+ * Integrates with archon-nostr skill for key management.
  */
 
 const { Wallet, getDecodedToken, getSecretKind } = require('@cashu/cashu-ts');
 const store = require('./wallet-store');
-const fs = require('fs');
-const path = require('path');
-
-// Load Archon/Nostr private key from env
-function getOwnPrivkey() {
-  const envFile = path.join(process.env.HOME, '.config/hex/nostr.env');
-  if (fs.existsSync(envFile)) {
-    const content = fs.readFileSync(envFile, 'utf8');
-    const match = content.match(/NOSTR_SECRET_KEY_HEX="?([a-f0-9]+)"?/i);
-    if (match) return match[1];
-  }
-  return null;
-}
+const archon = require('../lib/archon');
 
 async function main() {
   const token = process.argv[2];
@@ -62,9 +52,10 @@ async function main() {
   let privkey = null;
   if (isP2PK) {
     if (keyArg === '--self') {
-      privkey = getOwnPrivkey();
+      privkey = archon.getCashuPrivkey();
       if (!privkey) {
-        console.error('Could not find own privkey. Check ~/.config/hex/nostr.env');
+        console.error('Could not load own privkey.');
+        console.error('Ensure archon-nostr skill has run or ~/.config/hex/nostr.env exists.');
         process.exit(1);
       }
       console.log('Using own Archon/Nostr key to unlock...');

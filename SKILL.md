@@ -47,3 +47,12 @@ Cashu tokens look like: `cashuBo2F0gaJhaUgA...`
 ## Dependencies
 
 - `@cashu/cashu-ts` v3.x - Official Cashu TypeScript library
+
+## Archon Integration
+
+When archon skills are available in `~/clawd/skills/`:
+- `archon-nostr` → Key derivation for P2PK
+- `archon-crypto` → Encrypted backups
+- `archon-backup` → Vault storage
+
+Falls back gracefully if skills unavailable.
