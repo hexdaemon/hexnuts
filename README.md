@@ -9,6 +9,7 @@ Built on [@cashu/cashu-ts](https://github.com/cashubtc/cashu-ts).
 - **Mint/Melt** — Convert between Lightning and ecash
 - **Send/Receive** — Portable offline tokens
 - **P2PK Locking (NUT-11)** — Lock tokens to pubkeys
+- **Group Spending** — Lock to Archon groups with threshold signatures
 - **Archon Integration** — Use DID keys for P2PK, backup to vault
 - **Multi-mint support** — Use multiple mints
 
@@ -61,15 +62,40 @@ node scripts/lock.js 100 02abc123...
 node scripts/receive.js <cashu_token> --self
 ```
 
-### Multi-Signature Tokens
+### Group Tokens (Archon Groups)
 
-Create tokens requiring multiple DID signatures:
+Lock tokens to an Archon group with threshold signatures:
 
 ```bash
-# 2-of-3 multisig: any 2 of 3 DIDs can spend
+# Any 1 member of "daemon-collective" can spend
+node scripts/send-to-group.js 100 daemon-collective
+
+# Require 2-of-3 member signatures
+node scripts/send-to-group.js 100 daemon-collective --threshold 2
+
+# Use group DID directly
+node scripts/send-to-group.js 100 did:cid:bagaaiera...
+```
+
+How it works:
+1. Resolves group DID to get member list
+2. Resolves each member's DID to their secp256k1 pubkey  
+3. Locks token with NUT-11 multi-key + threshold
+
+Use cases:
+- **Group treasury**: Funds any authorized member can access
+- **Shared expenses**: Reimbursement tokens for team members
+- **Multi-sig escrow**: Require N-of-M approval for high-value transfers
+
+### Multi-Signature Tokens (Raw Pubkeys)
+
+Create tokens requiring multiple pubkey signatures without Archon groups:
+
+```bash
+# 2-of-3 multisig: any 2 of 3 pubkeys can spend
 node scripts/lock-multisig.js 100 --pubkeys pk1,pk2,pk3 --threshold 2
 
-# Include yourself + another DID
+# Include yourself + another pubkey
 node scripts/lock-multisig.js 100 --pubkeys pk1,pk2 --self --threshold 2
 
 # Escrow with timeout: pk1 OR pk2 can spend, refund to pk3 after 24h
@@ -222,6 +248,7 @@ node scripts/validate.js
 | `lock.js` | Create P2PK-locked token (--self) |
 | `lock-multisig.js` | Create multi-signature token |
 | `send-to-did.js` | Send P2PK token to DID/npub |
+| `send-to-group.js` | Send group-locked token to Archon group |
 | `info.js` | Inspect token details |
 | `backup.js` | Backup wallet |
 | `restore.js` | Restore wallet |
