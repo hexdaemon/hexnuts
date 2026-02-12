@@ -123,6 +123,49 @@ Benefits:
 - Recover Archon = recover Cashu wallet
 - Counter state tracked for proof uniqueness
 
+## Encrypted Ecash via Dmail
+
+Send P2PK-locked ecash through encrypted channels:
+
+```bash
+# Create encrypted ecash for recipient
+node scripts/dmail-send.js 100 npub1abc123... "Happy birthday!"
+
+# Output: P2PK token + instructions for encrypted delivery
+```
+
+### Full Flow: Sender → Recipient
+
+**Sender:**
+```bash
+# 1. Create P2PK token locked to recipient's npub
+node scripts/dmail-send.js 100 npub1qkjnsgk6zrs...
+
+# 2. Encrypt the token with archon-crypto
+~/clawd/skills/archon-crypto/scripts/encrypt-message.sh "cashuB..." recipient-alias
+
+# 3. Send encrypted payload via Nostr DM / Signal / email
+~/clawd/skills/nostr/scripts/nostr-dm.sh npub1... "<encrypted>"
+```
+
+**Recipient:**
+```bash
+# 1. Decrypt with their Archon key
+~/clawd/skills/archon-crypto/scripts/decrypt-message.sh <encrypted>
+
+# 2. Claim the P2PK token (only they can)
+node scripts/receive.js "cashuB..." --self
+```
+
+### Why Both P2PK + Encryption?
+
+| Layer | Protection |
+|-------|------------|
+| **P2PK (NUT-11)** | Only recipient's key can spend |
+| **Archon encryption** | Only recipient can see the token |
+
+Double protection: Even if the encrypted message leaks, only the intended recipient can spend the ecash.
+
 ## Security
 
 - **Wallet file is plaintext** — Token proofs stored unencrypted locally
@@ -167,6 +210,7 @@ node scripts/validate.js
 | `validate.js` | Check installation |
 | `init-deterministic.js` | Enable NUT-13 deterministic mode |
 | `recover.js` | Recover wallet from Archon mnemonic |
+| `dmail-send.js` | Create encrypted ecash for dmail |
 
 ## License
 
