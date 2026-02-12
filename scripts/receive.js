@@ -1,17 +1,34 @@
 #!/usr/bin/env node
 /**
- * Receive a Cashu token
- * Usage: node receive.js <cashu_token>
+ * Receive a Cashu token (including P2PK-locked tokens)
+ * Usage: 
+ *   node receive.js <cashu_token>              # Regular token
+ *   node receive.js <cashu_token> --self       # P2PK token locked to own key
+ *   node receive.js <cashu_token> <privkey>    # P2PK token with explicit privkey
  */
 
-const { Wallet, getDecodedToken } = require('@cashu/cashu-ts');
+const { Wallet, getDecodedToken, getSecretKind } = require('@cashu/cashu-ts');
 const store = require('./wallet-store');
+const fs = require('fs');
+const path = require('path');
+
+// Load Archon/Nostr private key from env
+function getOwnPrivkey() {
+  const envFile = path.join(process.env.HOME, '.config/hex/nostr.env');
+  if (fs.existsSync(envFile)) {
+    const content = fs.readFileSync(envFile, 'utf8');
+    const match = content.match(/NOSTR_SECRET_KEY_HEX="?([a-f0-9]+)"?/i);
+    if (match) return match[1];
+  }
+  return null;
+}
 
 async function main() {
   const token = process.argv[2];
+  const keyArg = process.argv[3];
   
   if (!token) {
-    console.error('Usage: node receive.js <cashu_token>');
+    console.error('Usage: node receive.js <cashu_token> [--self|privkey]');
     process.exit(1);
   }
   
@@ -21,13 +38,47 @@ async function main() {
   const tokenProofs = decoded.proofs;
   const tokenAmount = tokenProofs.reduce((s, p) => s + p.amount, 0);
   
+  // Check if token is P2PK-locked
+  let isP2PK = false;
+  try {
+    for (const proof of tokenProofs) {
+      const kind = getSecretKind(proof.secret);
+      if (kind === 'P2PK') {
+        isP2PK = true;
+        break;
+      }
+    }
+  } catch (e) {
+    // Not a structured secret, regular token
+  }
+  
   console.log(`Receiving ${tokenAmount} sats from ${mintUrl}...`);
+  if (isP2PK) console.log('🔐 Token is P2PK-locked');
   
   const wallet = new Wallet(mintUrl);
   await wallet.loadMint();
   
+  // Determine private key for P2PK tokens
+  let privkey = null;
+  if (isP2PK) {
+    if (keyArg === '--self') {
+      privkey = getOwnPrivkey();
+      if (!privkey) {
+        console.error('Could not find own privkey. Check ~/.config/hex/nostr.env');
+        process.exit(1);
+      }
+      console.log('Using own Archon/Nostr key to unlock...');
+    } else if (keyArg) {
+      privkey = keyArg;
+    } else {
+      console.error('P2PK token requires --self or explicit privkey');
+      process.exit(1);
+    }
+  }
+  
   // Receive token (swap with mint to get fresh proofs)
-  const proofs = await wallet.receive(token);
+  const receiveOpts = privkey ? { privkey } : {};
+  const proofs = await wallet.receive(token, receiveOpts);
   
   // Save to wallet
   store.addProofsForMint(mintUrl, proofs);
