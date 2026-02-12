@@ -40,6 +40,9 @@ node scripts/melt.js <bolt11_invoice>
 # Send tokens (create portable token string)
 node scripts/send.js 50
 
+# Send with proof verification (checks proofs valid before spending)
+node scripts/send.js 50 --verify
+
 # Receive tokens
 node scripts/receive.js <cashu_token>
 
@@ -239,11 +242,22 @@ node scripts/validate.js
 | File permissions | ✅ | 600 for wallet + counters |
 | Deterministic wallet (NUT-13) | ✅ | Standalone scripts |
 
-### Security
+### Security & Reliability
 
 - Wallet file permissions set to 600 (owner read/write only)
 - `--privkey-file` option to avoid key exposure in shell history
 - Encrypted local backup option with AES-256-CBC
+- File locking prevents race conditions in concurrent access
+- `--verify` flag to check proof validity before spending
+
+### Deterministic Mode
+
+All operations automatically use deterministic mode when `ARCHON_PASSPHRASE` is set:
+
+```bash
+export ARCHON_PASSPHRASE="your-passphrase"
+node scripts/send.js 100  # Uses deterministic secrets
+```
 
 ## Scripts Reference
 
