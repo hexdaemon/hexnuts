@@ -17,9 +17,10 @@
  *   - Group DID (e.g., "did:cid:bagaaiera...")
  */
 
-const { Wallet, getEncodedTokenV4 } = require('@cashu/cashu-ts');
+const { getEncodedTokenV4 } = require('@cashu/cashu-ts');
 const store = require('./wallet-store');
 const groups = require('../lib/groups');
+const { createWallet } = require('../lib/wallet');
 
 function parseArgs(args) {
   const result = { threshold: 1 };
@@ -96,8 +97,7 @@ async function main() {
   console.log(`  Members: ${resolved.pubkeys.length}`);
   console.log(`  Threshold: ${threshold} of ${resolved.pubkeys.length}`);
   
-  const wallet = new Wallet(mintUrl);
-  await wallet.loadMint();
+  const wallet = await createWallet(mintUrl);
   
   // Create P2PK-locked token with multiple pubkeys and threshold
   // NUT-11 specifies: pubkeys array + n_sigs for threshold

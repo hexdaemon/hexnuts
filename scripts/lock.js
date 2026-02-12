@@ -10,9 +10,10 @@
  * Integrates with archon-nostr skill for key management.
  */
 
-const { Wallet, getEncodedTokenV4 } = require('@cashu/cashu-ts');
+const { getEncodedTokenV4 } = require('@cashu/cashu-ts');
 const store = require('./wallet-store');
 const archon = require('../lib/archon');
+const { createWallet } = require('../lib/wallet');
 
 async function main() {
   const args = process.argv.slice(2);
@@ -59,8 +60,7 @@ async function main() {
   
   console.log(`Creating P2PK-locked token for ${amount} sats...`);
   
-  const wallet = new Wallet(mintUrl);
-  await wallet.loadMint();
+  const wallet = await createWallet(mintUrl);
   
   // Create P2PK-locked token using WalletOps
   const { keep, send } = await wallet.ops

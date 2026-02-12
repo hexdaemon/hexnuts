@@ -14,10 +14,11 @@
  *   node send-to-did.js 100 02abc123...
  */
 
-const { Wallet, getEncodedTokenV4 } = require('@cashu/cashu-ts');
+const { getEncodedTokenV4 } = require('@cashu/cashu-ts');
 const { execSync } = require('child_process');
 const store = require('./wallet-store');
 const archon = require('../lib/archon');
+const { createWallet } = require('../lib/wallet');
 
 // Convert npub to hex pubkey
 function npubToHex(npub) {
@@ -117,8 +118,7 @@ async function main() {
   
   console.log(`Creating ${amount} sat P2PK token for recipient...`);
   
-  const wallet = new Wallet(mintUrl);
-  await wallet.loadMint();
+  const wallet = await createWallet(mintUrl);
   
   // Create P2PK-locked token
   const { keep, send } = await wallet.ops

@@ -14,11 +14,12 @@
  *   node dmail-send.js 25 02abc123...
  */
 
-const { Wallet, getEncodedTokenV4 } = require('@cashu/cashu-ts');
+const { getEncodedTokenV4 } = require('@cashu/cashu-ts');
 const { execSync } = require('child_process');
 const store = require('./wallet-store');
 const archon = require('../lib/archon');
 const groups = require('../lib/groups');
+const { createWallet } = require('../lib/wallet');
 const path = require('path');
 
 const SKILLS_DIR = path.join(process.env.HOME, 'clawd/skills');
@@ -124,8 +125,7 @@ async function main() {
   
   console.log(`✓ Resolved (${resolved.type}): ${resolved.pubkey.slice(0, 20)}...`);
   
-  const wallet = new Wallet(mintUrl);
-  await wallet.loadMint();
+  const wallet = await createWallet(mintUrl);
   
   // Create P2PK-locked token
   console.log(`Creating P2PK token for ${amount} sats...`);

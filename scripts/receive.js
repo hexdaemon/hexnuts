@@ -13,9 +13,10 @@
  */
 
 const fs = require('fs');
-const { Wallet, getDecodedToken, getSecretKind } = require('@cashu/cashu-ts');
+const { getDecodedToken, getSecretKind } = require('@cashu/cashu-ts');
 const store = require('./wallet-store');
 const archon = require('../lib/archon');
+const { createWallet } = require('../lib/wallet');
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -94,8 +95,7 @@ async function main() {
   console.log(`Receiving ${tokenAmount} sats from ${mintUrl}...`);
   if (isP2PK) console.log('🔐 Token is P2PK-locked');
   
-  const wallet = new Wallet(mintUrl);
-  await wallet.loadMint();
+  const wallet = await createWallet(mintUrl);
   
   // Determine private key for P2PK tokens
   let privkey = opts.privkey;

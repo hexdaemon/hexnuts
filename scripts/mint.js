@@ -6,8 +6,9 @@
  * With --quote <quote_id>: claim tokens for an already-paid quote
  */
 
-const { Wallet, MintQuoteState } = require('@cashu/cashu-ts');
+const { MintQuoteState } = require('@cashu/cashu-ts');
 const store = require('./wallet-store');
+const { createWallet } = require('../lib/wallet');
 
 async function main() {
   const args = process.argv.slice(2);
@@ -32,8 +33,7 @@ async function main() {
   
   console.log(`Minting ${amount} sats from ${mintUrl}...`);
   
-  const wallet = new Wallet(mintUrl);
-  await wallet.loadMint();
+  const wallet = await createWallet(mintUrl);
   
   // Create mint quote (generates Lightning invoice)
   const quote = await wallet.createMintQuote(amount);
@@ -50,8 +50,7 @@ async function main() {
 async function claimQuote(quoteId, mintUrl) {
   console.log(`Claiming quote ${quoteId} from ${mintUrl}...`);
   
-  const wallet = new Wallet(mintUrl);
-  await wallet.loadMint();
+  const wallet = await createWallet(mintUrl);
   
   // Check quote status
   const quote = await wallet.checkMintQuote(quoteId);

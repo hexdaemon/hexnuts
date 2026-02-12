@@ -16,9 +16,10 @@
  *   node lock-multisig.js 100 --pubkeys pk1,pk2 --refund pk3 --locktime 1710000000
  */
 
-const { Wallet, P2PKBuilder, getEncodedTokenV4 } = require('@cashu/cashu-ts');
+const { P2PKBuilder, getEncodedTokenV4 } = require('@cashu/cashu-ts');
 const store = require('./wallet-store');
 const archon = require('../lib/archon');
+const { createWallet } = require('../lib/wallet');
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -143,8 +144,7 @@ async function main() {
   }
   
   // Create token
-  const wallet = new Wallet(mintUrl);
-  await wallet.loadMint();
+  const wallet = await createWallet(mintUrl);
   
   const { keep, send } = await wallet.ops
     .send(opts.amount, proofs)

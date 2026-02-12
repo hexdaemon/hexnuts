@@ -4,8 +4,8 @@
  * Usage: node melt.js <bolt11_invoice> [mint_url]
  */
 
-const { Wallet } = require('@cashu/cashu-ts');
 const store = require('./wallet-store');
+const { createWallet } = require('../lib/wallet');
 
 async function main() {
   const invoice = process.argv[2];
@@ -27,8 +27,7 @@ async function main() {
   console.log(`Melting tokens from ${mintUrl}...`);
   console.log(`Available balance: ${balance} sats`);
   
-  const wallet = new Wallet(mintUrl);
-  await wallet.loadMint();
+  const wallet = await createWallet(mintUrl);
   
   // Get melt quote
   const quote = await wallet.createMeltQuote(invoice);
