@@ -65,7 +65,7 @@ function resolveRecipient(recipient) {
   
   // Try as Archon alias
   try {
-    const aliasScript = path.join(SKILLS_DIR, 'archon-aliases/scripts/resolve-did.sh');
+    const aliasScript = path.join(SKILLS_DIR, 'archon-keymaster/scripts/aliases/resolve-did.sh');
     const result = execSync(`bash ${aliasScript} ${recipient} 2>/dev/null`, { encoding: 'utf8' });
     const did = result.trim();
     if (did.startsWith('did:')) {
@@ -171,7 +171,7 @@ ${token}
   
   if (skills.crypto) {
     console.log(`• Archon encrypted message:
-  ~/clawd/skills/archon-crypto/scripts/encrypt-message.sh "${token}" <recipient-alias>
+  ~/clawd/skills/archon-keymaster/scripts/crypto/encrypt-message.sh "${token}" <recipient-alias>
 `);
   }
   

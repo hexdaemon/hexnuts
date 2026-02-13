@@ -39,23 +39,23 @@ console.log('\n--- Archon Integration ---');
 const skills = archon.getAvailableSkills();
 
 if (skills.nostr) {
-  console.log('✓ archon-nostr skill available');
+  console.log('✓ archon-keymaster/nostr available');
 } else {
-  console.log('○ archon-nostr skill not found');
+  console.log('○ archon-keymaster/nostr not found');
   warnings++;
 }
 
 if (skills.crypto) {
-  console.log('✓ archon-crypto skill available');
+  console.log('✓ archon-keymaster/crypto available');
 } else {
-  console.log('○ archon-crypto skill not found');
+  console.log('○ archon-keymaster/crypto not found');
   warnings++;
 }
 
 if (skills.backup) {
-  console.log('✓ archon-backup skill available');
+  console.log('✓ archon-keymaster/backup available');
 } else {
-  console.log('○ archon-backup skill not found');
+  console.log('○ archon-keymaster/backup not found');
   warnings++;
 }
 
@@ -68,7 +68,7 @@ if (keys) {
   console.log(`  Privkey: [loaded]`);
 } else {
   console.log('✗ No keys found');
-  console.log('  Run archon-nostr skill or create ~/.config/hex/nostr.env');
+  console.log('  Run archon-keymaster/nostr or create ~/.config/hex/nostr.env');
   errors++;
 }
 

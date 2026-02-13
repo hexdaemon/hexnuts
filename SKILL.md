@@ -98,9 +98,10 @@ node $CASHU/restore.js <backup_file>
 
 ## Archon Integration
 
-When archon skills are available in `~/clawd/skills/`:
-- `archon-nostr` → Key derivation for P2PK
-- `archon-crypto` → Encrypted backups  
-- `archon-backup` → Vault storage
+When `archon-keymaster` skill is available in `~/clawd/skills/`:
+- `archon-keymaster/nostr` → Key derivation for P2PK
+- `archon-keymaster/crypto` → Encrypted backups  
+- `archon-keymaster/backup` → Vault storage
+- `archon-keymaster/aliases` → DID alias resolution
 
-Falls back gracefully if skills unavailable.
+Falls back gracefully if skill unavailable.

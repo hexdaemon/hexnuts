@@ -7,7 +7,7 @@
  *   node lock.js <amount_sats> [pubkey]     # Lock to specific pubkey
  *   node lock.js <amount_sats> --self       # Lock to own Archon/Nostr pubkey
  * 
- * Integrates with archon-nostr skill for key management.
+ * Integrates with archon-keymaster/nostr for key management.
  */
 
 const { getEncodedTokenV4 } = require('@cashu/cashu-ts');
@@ -33,7 +33,7 @@ async function main() {
     pubkey = archon.getCashuPubkey();
     if (!pubkey) {
       console.error('Could not load own pubkey.');
-      console.error('Ensure archon-nostr skill has run or ~/.config/hex/nostr.env exists.');
+      console.error('Ensure archon-keymaster/nostr has run or ~/.config/hex/nostr.env exists.');
       const available = archon.getAvailableSkills();
       console.error('Available archon skills:', JSON.stringify(available));
       process.exit(1);

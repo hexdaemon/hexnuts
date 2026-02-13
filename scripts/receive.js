@@ -6,7 +6,7 @@
  *   node receive.js <cashu_token> --self             # P2PK token locked to own key
  *   node receive.js <cashu_token> --privkey-file <f> # P2PK with key from file
  * 
- * Integrates with archon-nostr skill for key management.
+ * Integrates with archon-keymaster/nostr for key management.
  * 
  * Security: Use --privkey-file instead of passing key as argument
  *           to avoid exposing it in shell history.
@@ -212,7 +212,7 @@ async function main() {
       privkey = archon.getCashuPrivkey();
       if (!privkey) {
         console.error('Could not load own privkey.');
-        console.error('Ensure archon-nostr skill has run or ~/.config/hex/nostr.env exists.');
+        console.error('Ensure archon-keymaster/nostr has run or ~/.config/hex/nostr.env exists.');
         process.exit(1);
       }
       console.log('Using own Archon/Nostr key to unlock...');
